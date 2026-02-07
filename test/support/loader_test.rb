@@ -56,7 +56,7 @@ class LoaderTest < Minitest::Test
     FileUtils.mkdir_p(TMP_DIR)
   end
 
-  def with_files(files, rm: true)
+  def with_files(files = [], rm: true)
     mkdir_test
 
     Dir.chdir(TMP_DIR) do

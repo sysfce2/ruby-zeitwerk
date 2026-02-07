@@ -70,6 +70,18 @@ class TestLs < LoaderTest
     end
   end
 
+  test "ignores non-supported files, even if they have a .rb extension" do
+    with_files do
+      begin
+        File.mkfifo("named_pipe.rb")
+      rescue Errno::ENOTSUP
+        skip "Platform does not support named pipes"
+      else
+        assert_empty ls
+      end
+    end
+  end
+
   test "ignores directories without Ruby files" do
     files = ["tasks/billing/generate_bills.rake"]
     with_files(files) do

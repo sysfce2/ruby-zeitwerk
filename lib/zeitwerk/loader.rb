@@ -277,14 +277,18 @@ module Zeitwerk
     def cpath_expected_at(path)
       abspath = File.expand_path(path)
 
-      raise Zeitwerk::Error.new("#{abspath} does not exist") unless File.exist?(abspath)
+      ftype = begin
+        ftype(abspath)
+      rescue Errno::ENOENT
+        raise Zeitwerk::Error.new("#{abspath} does not exist")
+      end
 
-      return unless dir?(abspath) || ruby?(abspath)
+      return unless (:file == ftype && ruby?(abspath)) || :directory == ftype
       return if ignored_path?(abspath)
 
       paths = []
 
-      if ruby?(abspath)
+      if :file == ftype
         basename = File.basename(abspath, ".rb")
         return if hidden?(basename)
 

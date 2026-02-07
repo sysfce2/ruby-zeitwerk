@@ -64,6 +64,18 @@ class TestCpathExpectedAtNil < LoaderTest
     end
   end
 
+  test "returns nil if the argument is a non-supported file, even if they have a .rb extension" do
+    with_files do
+      begin
+        File.mkfifo("named_pipe.rb")
+      rescue Errno::ENOTSUP
+        skip "Platform does not support named pipes"
+      else
+        assert_nil loader.cpath_expected_at("named_pipe.rb")
+      end
+    end
+  end
+
   test "returns nil if the argument does not belong to the autoload paths" do
     with_setup(dirs: ["."]) do
       assert_nil loader.cpath_expected_at(__dir__)
