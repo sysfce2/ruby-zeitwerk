@@ -13,38 +13,25 @@ module Zeitwerk::Loader::Helpers
 
   #: (String) { (String, String, Symbol) -> void } -> void
   private def ls(dir)
-    children = Dir.children(dir)
+    children = []
+    scan_dir(dir) do |*args|
+      children << args
+    end
 
     # The order in which a directory is listed depends on the file system.
     #
-    # Since client code may run in different platforms, it seems convenient to
-    # order directory entries. This provides consistent eager loading across
-    # platforms, for example.
-    children.sort!
+    # Since client code may run on different platforms, it seems convenient to
+    # sort directory entries. This provides more deterministic behavior, with
+    # consistent eager loading in particular.
+    children.sort_by!(&:first)
 
-    children.each do |basename|
-      next if hidden?(basename)
-
-      abspath = File.join(dir, basename)
-      next if ignored_path?(abspath)
-
-      if dir?(abspath)
-        next if roots.key?(abspath)
-
-        if !has_at_least_one_ruby_file?(abspath)
-          log("directory #{abspath} is ignored because it has no Ruby files") if logger
-          next
-        end
-
-        ftype = :directory
-      else
-        next unless ruby?(abspath)
-        ftype = :file
+    children.each do |basename, abspath, ftype|
+      if ftype == :directory && !has_at_least_one_ruby_file?(abspath)
+        log("directory #{abspath} is ignored because it has no Ruby files") if logger
+        next
       end
 
-      # We freeze abspath because that saves allocations when passed later to
-      # File methods. See #125.
-      yield basename, abspath.freeze, ftype
+      yield basename, abspath, ftype
     end
   end
 
@@ -57,21 +44,49 @@ module Zeitwerk::Loader::Helpers
     to_visit = [dir]
 
     while (dir = to_visit.shift)
-      Dir.each_child(dir) do |basename|
-        next if hidden?(basename)
-
-        abspath = File.join(dir, basename)
-        next if ignored_path?(abspath)
-
-        if dir?(abspath)
-          to_visit << abspath unless roots.key?(abspath)
-        else
-          return true if ruby?(abspath)
-        end
+      scan_dir(dir) do |_, abspath, ftype|
+        return true if ftype == :file
+        to_visit << abspath
       end
     end
 
     false
+  end
+
+  # This is a lowish-level method to scan directories. It filters out some stuff
+  # the loader is never interested in, and passes the ftype up. The rest of the
+  # library should generally use `ls`.
+  #
+  # Keep an eye on https://bugs.ruby-lang.org/issues/21800.
+  #
+  #: (String) { (String, String, Symbol) -> void } -> void
+  private def scan_dir(dir)
+    Dir.each_child(dir) do |basename|
+      next if hidden?(basename)
+
+      abspath = File.join(dir, basename)
+      next if ignored_path?(abspath)
+
+      # Saves allocating a File::Stat object, optimistic.
+      ftype = File.ftype(abspath)
+
+      # Two potential syscalls, but symlinks are rare in client projects. Kind
+      # of mimics the fstatat() call you'd do for symlinks in C.
+      ftype = File.stat(abspath).ftype if ftype == "link"
+
+      if ftype == "file"
+        next unless ruby?(abspath)
+      elsif ftype == "directory"
+        # Conceptually, root directories start separate trees.
+        next if root_dir?(abspath)
+      else
+        next
+      end
+
+      # We freeze abspath because that saves allocations when passed later to
+      # File methods. See https://github.com/fxn/zeitwerk/pull/125.
+      yield basename, abspath.freeze, ftype.to_sym
+    end
   end
 
   #: (String) -> bool
