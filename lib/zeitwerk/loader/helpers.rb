@@ -67,16 +67,11 @@ module Zeitwerk::Loader::Helpers
       abspath = File.join(dir, basename)
       next if ignored_path?(abspath)
 
-      ftype = ftype(abspath)
+      ftype = supported_ftype?(abspath)
+      next unless ftype
 
-      if :file == ftype
-        next unless ruby?(abspath)
-      elsif :directory == ftype
-        # Conceptually, root directories start separate trees.
-        next if root_dir?(abspath)
-      else
-        next
-      end
+      # Conceptually, root directories start separate trees.
+      next if :directory == ftype && root_dir?(abspath)
 
       # We freeze abspath because that saves allocations when passed later to
       # File methods. See https://github.com/fxn/zeitwerk/pull/125.
@@ -84,13 +79,22 @@ module Zeitwerk::Loader::Helpers
     end
   end
 
-  private def ftype(path)
+  #: (String, String) -> Symbol?
+  private def supported_ftype?(abspath, basename = File.basename(abspath))
     # Saves allocating a File::Stat object, optimistic.
-    ftype = File.ftype(path)
+    ftype = File.ftype(abspath).to_sym
 
     # Two potential syscalls, but symlinks are rare in client projects. Kind of
     # mimics the fstatat() call you'd do for symlinks in C.
-    ftype == "link" ? File.stat(path).ftype.to_sym : ftype.to_sym
+    ftype = File.stat(abspath).ftype.to_sym if ftype == :link
+
+    # For simplicity, and to avoid more syscalls, we do not support directories
+    # with a .rb extension.
+    if :file == ftype
+      return ftype if ruby?(basename)
+    elsif :directory == ftype
+      return ftype if !ruby?(basename)
+    end
   end
 
   #: (String) -> bool

@@ -278,12 +278,12 @@ module Zeitwerk
       abspath = File.expand_path(path)
 
       ftype = begin
-        ftype(abspath)
+        supported_ftype?(abspath)
       rescue Errno::ENOENT
         raise Zeitwerk::Error.new("#{abspath} does not exist")
       end
+      return unless ftype
 
-      return unless (:file == ftype && ruby?(abspath)) || :directory == ftype
       return if ignored_path?(abspath)
 
       paths = []
