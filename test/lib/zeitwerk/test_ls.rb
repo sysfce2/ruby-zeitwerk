@@ -74,7 +74,7 @@ class TestLs < LoaderTest
     with_files do
       begin
         File.mkfifo("named_pipe.rb")
-      rescue Errno::ENOTSUP
+      rescue NotImplementedError
         skip "Platform does not support named pipes"
       else
         assert_empty ls
