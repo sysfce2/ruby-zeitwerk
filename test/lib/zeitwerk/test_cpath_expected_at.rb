@@ -68,7 +68,7 @@ class TestCpathExpectedAtNil < LoaderTest
     with_files do
       begin
         File.mkfifo("named_pipe.rb")
-      rescue Errno::ENOTSUP
+      rescue NotImplementedError
         skip "Platform does not support named pipes"
       else
         assert_nil loader.cpath_expected_at("named_pipe.rb")
